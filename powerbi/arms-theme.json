@@ -1,0 +1,50 @@
+{
+  "$schema": "https://schemas.microsoft.com/powerbi/2016/01/theme.json",
+  "name": "Executive Slate",
+  "dataColors": [
+    "#1F3A5F",
+    "#2E6F95",
+    "#4F9DA6",
+    "#7A8C99",
+    "#E3A72F",
+    "#C75B5B",
+    "#6D5AA6",
+    "#5B8C5A"
+  ],
+  "background": "#F4F6F8",
+  "foreground": "#243447",
+  "tableAccent": "#2E6F95",
+  "good": "#3E8E6D",
+  "neutral": "#E3A72F",
+  "bad": "#C75B5B",
+  "maximum": "#1F3A5F",
+  "center": "#DCE5EC",
+  "minimum": "#4F9DA6",
+  "null": "#D9DEE3",
+  "visualStyles": {
+    "*": {
+      "*": {
+        "title": [
+          {
+            "color": { "solid": { "color": "#243447" } },
+            "fontFamily": "Segoe UI Semibold",
+            "fontSize": 12
+          }
+        ],
+        "background": [
+          {
+            "color": { "solid": { "color": "#FFFFFF" } },
+            "transparency": 0
+          }
+        ],
+        "border": [
+          {
+            "show": true,
+            "color": { "solid": { "color": "#D9DEE3" } },
+            "radius": 4
+          }
+        ]
+      }
+    }
+  }
+}

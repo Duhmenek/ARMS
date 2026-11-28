@@ -10,14 +10,14 @@ interface LogCountModalProps {
 export const LogCountModal: React.FC<LogCountModalProps> = ({ isOpen, onClose }) => {
   const { addDailyLog } = useApp();
 
-  const [date, setDate] = useState('23/11/2026');
-  const [inbound, setInbound] = useState<number>(24);
-  const [outbound, setOutbound] = useState<number>(31);
-  const [scrap, setScrap] = useState<number>(4);
-  const [inventory, setInventory] = useState<number>(9);
-  const [rhTemp, setRhTemp] = useState<number>(24);
-  const [rackInspections, setRackInspections] = useState<number>(8);
-  const [mhePreOps, setMhePreOps] = useState<number>(12);
+  const [date, setDate] = useState(new Date().toISOString().slice(0,10));
+  const [inbound, setInbound] = useState<number>(0);
+  const [outbound, setOutbound] = useState<number>(0);
+  const [scrap, setScrap] = useState<number>(0);
+  const [inventory, setInventory] = useState<number>(0);
+  const [rhTemp, setRhTemp] = useState<number>(0);
+  const [rackInspections, setRackInspections] = useState<number>(0);
+  const [mhePreOps, setMhePreOps] = useState<number>(0);
 
   if (!isOpen) return null;
 
@@ -66,14 +66,13 @@ export const LogCountModal: React.FC<LogCountModalProps> = ({ isOpen, onClose })
           <div>
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center space-x-1.5">
               <Calendar className="w-3.5 h-3.5 text-[#0A5C1D]" />
-              <span>Select Date (DD / MM / YYYY)</span>
+              <span>Shift Date</span>
             </label>
             <input
-              type="text"
+              type="date"
               required
               value={date}
               onChange={e => setDate(e.target.value)}
-              placeholder="23/11/2026"
               className="w-full px-3.5 py-2 rounded-lg border border-slate-300 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#0A5C1D] focus:border-transparent"
             />
           </div>

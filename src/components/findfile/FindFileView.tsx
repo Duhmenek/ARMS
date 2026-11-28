@@ -29,6 +29,8 @@ export const FindFileView: React.FC = () => {
   const [filterType, setFilterType] = useState('ALL');
   const [filterStatus, setFilterStatus] = useState<'ALL' | RecordStatus>('ALL');
   const [filterRetention, setFilterRetention] = useState('ALL');
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
 
   // Modals & Drawers
   const [isPullOutOpen, setIsPullOutOpen] = useState(false);
@@ -53,10 +55,13 @@ export const FindFileView: React.FC = () => {
         !query ||
         item.armsRef.toLowerCase().includes(query) ||
         item.location.code.toLowerCase().includes(query) ||
+        item.location.shelf.toLowerCase().includes(query) ||
+        item.location.folder.toLowerCase().includes(query) ||
         item.location.zone.toLowerCase().includes(query) ||
         item.materialDoc.toLowerCase().includes(query) ||
         item.deliveryPo.toLowerCase().includes(query) ||
         item.custodian.toLowerCase().includes(query) ||
+        (item.assignedCustodian || '').toLowerCase().includes(query) ||
         item.materialNumber.toLowerCase().includes(query) ||
         item.transactionType.toLowerCase().includes(query);
 
@@ -73,9 +78,12 @@ export const FindFileView: React.FC = () => {
       const matchRetention =
         filterRetention === 'ALL' || item.retentionStatus === filterRetention;
 
-      return matchSearch && matchType && matchStatus && matchRetention;
+      const dateValue = item.grDate.includes('/') ? item.grDate.split('/').reverse().join('-') : item.grDate;
+      const matchDate = (!fromDate || dateValue >= fromDate) && (!toDate || dateValue <= toDate);
+
+      return matchSearch && matchType && matchStatus && matchRetention && matchDate;
     });
-  }, [files, appliedSearch, filterType, filterStatus, filterRetention]);
+  }, [files, appliedSearch, filterType, filterStatus, filterRetention, fromDate, toDate]);
 
   // Pagination
   const totalPages = Math.ceil(filteredFiles.length / pageSize) || 1;
@@ -147,7 +155,7 @@ export const FindFileView: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search ARMS Ref, Location A01, PO, Doc #..."
+                placeholder="Search ARMS Ref, location, PO, or document number"
                 className="w-full pl-9 pr-3 py-2 rounded-lg border border-slate-300 text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0A5C1D]"
               />
             </div>
@@ -197,6 +205,9 @@ export const FindFileView: React.FC = () => {
             <option value="Scrap">Scrap Management</option>
             <option value="cycle">Daily Cycle Count</option>
           </select>
+
+          <label className="flex items-center gap-1.5 text-slate-600">From <input type="date" value={fromDate} onChange={e=>setFromDate(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5" /></label>
+          <label className="flex items-center gap-1.5 text-slate-600">To <input type="date" value={toDate} onChange={e=>setToDate(e.target.value)} className="rounded-md border border-slate-300 px-2 py-1.5" /></label>
 
           {/* Status Filter */}
           <select

@@ -1,0 +1,6 @@
+Microsoft Access encountered an error while importing the object 'frmLogin'.
+
+Error encountered at line 77.
+Expected: Value
+Error encountered at line 77.
+Expected: 'End'.  Found: True.

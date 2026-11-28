@@ -1,6 +1,7 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../../context/AppContext';
 import { ReportType } from '../../types';
+import { api } from '../../services/api';
 import {
   DownloadCloud,
   Calendar,
@@ -15,16 +16,16 @@ import {
 } from 'lucide-react';
 
 export const ReportsView: React.FC = () => {
-  const { files, notifications, dailyLogs, showToast } = useApp();
+  const { files, borrowRequests, dailyLogs, currentUser, showToast } = useApp();
 
   const [activeReport, setActiveReport] = useState<ReportType>('borrow');
-  const [startDate, setStartDate] = useState('01 11 2026');
-  const [endDate, setEndDate] = useState('23 11 2026');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
 
   // Report 1: Borrow Reports Data
   const borrowRecords = useMemo(() => {
-    return files.filter(f => f.status === 'Borrowed' || f.borrowInfo !== undefined);
-  }, [files]);
+    return borrowRequests;
+  }, [borrowRequests]);
 
   // Report 2: Retention Reports Data
   const retentionRecords = useMemo(() => {
@@ -40,19 +41,40 @@ export const ReportsView: React.FC = () => {
   }, [files]);
 
   // Report 3: On-Time Encoding Compliance Data
-  const complianceData = [
-    { metric: 'IFT Deliveries Encoding (Within 2 hrs)', target: '98.0%', actual: '99.2%', status: 'Compliant' },
-    { metric: 'Local Resupply Dispatch Documentation', target: '95.0%', actual: '96.8%', status: 'Compliant' },
-    { metric: 'Scrap Certificate & Manifest Filing', target: '100.0%', actual: '100.0%', status: 'Compliant' },
-    { metric: 'Daily Shift Log Count Closure', target: '100.0%', actual: '97.5%', status: 'Compliant' },
-    { metric: 'Physical Grid Indexing Accuracy (A01-D04)', target: '99.5%', actual: '99.8%', status: 'Compliant' },
-    { metric: 'Requisition Chain-of-Custody Turnaround', target: '< 4 hrs', actual: '1.8 hrs', status: 'Optimal' }
-  ];
+  const [complianceData, setComplianceData] = useState<{metric:string;target:string;actual:string;status:string}[]>([]);
+  const [storageReport, setStorageReport] = useState<{locations:{zone:string;shelf:string;folder:string;max_capacity:number;occupied:number}[];shelves:{zone:string;shelf:string;capacity:number;occupied:number;occupancy:number;expansionAlert:boolean}[];totalCapacity:number;occupied:number;occupancy:number;expansionAlert:boolean;recommendations:(typeof files[number]&{recommendationReason?:string})[]} | null>(null);
+  const [storageForm, setStorageForm] = useState({zone:'',shelf:'',folder:'',maxCapacity:25});
+  useEffect(() => {
+    api<{encoder:string;day:string;entries:number}[]>('/private/encoding-compliance')
+      .then(rows => setComplianceData(rows.map(row=>({metric:row.encoder||'Unassigned',target:row.day,actual:`${row.entries} records`,status:'Tracked'}))))
+      .catch(error=>console.error('Could not load encoding compliance:',error));
+    api<typeof storageReport>('/private/storage-utilization').then(setStorageReport)
+      .catch(error=>console.error('Could not load storage utilization:',error));
+  }, [files]);
+  const addStorageLocation = async (event:React.FormEvent) => {
+    event.preventDefault();
+    await api('/private/storage-locations',{method:'POST',headers:{'Content-Type':'application/json','X-ARMS-Request':'1'},body:JSON.stringify(storageForm)});
+    setStorageForm({zone:'',shelf:'',folder:'',maxCapacity:25});
+    setStorageReport(await api('/private/storage-utilization'));
+    showToast('Storage location capacity saved');
+  };
 
   // Report 4: Document Master Inventory Data
   const masterRecords = useMemo(() => {
     return files;
   }, [files]);
+
+  const inDateRange = (value: string) => {
+    if (!value) return !startDate && !endDate;
+    const normalized = value.includes('/')
+      ? value.split('/').reverse().join('-')
+      : value.slice(0, 10);
+    return (!startDate || normalized >= startDate) && (!endDate || normalized <= endDate);
+  };
+  const filteredBorrowRecords = useMemo(() => borrowRecords.filter(record => inDateRange(record.requestDate)), [borrowRecords, startDate, endDate]);
+  const filteredRetentionRecords = useMemo(() => retentionRecords.filter(record => inDateRange(record.grDate)), [retentionRecords, startDate, endDate]);
+  const filteredComplianceData = useMemo(() => complianceData.filter(row => inDateRange(row.target)), [complianceData, startDate, endDate]);
+  const filteredMasterRecords = useMemo(() => masterRecords.filter(record => inDateRange(record.grDate)), [masterRecords, startDate, endDate]);
 
   // CSV Generator function
   const handleExportCSV = () => {
@@ -62,19 +84,14 @@ export const ReportsView: React.FC = () => {
 
     if (activeReport === 'borrow') {
       headers = ['ARMS Reference', 'Location Code', 'Transaction Series', 'Borrower Name', 'Designation', 'Audit Purpose', 'Request Date', 'Status'];
-      rows = borrowRecords.map(f => [
-        `"${f.armsRef}"`,
-        `"${f.location.code}"`,
-        `"${f.borrowInfo?.transactionSeries || 'N/A'}"`,
-        `"${f.borrowInfo?.borrowerName || 'N/A'}"`,
-        `"${f.borrowInfo?.designation || 'N/A'}"`,
-        `"${f.borrowInfo?.purpose || 'N/A'}"`,
-        `"${f.borrowInfo?.requestDate || f.grDate}"`,
-        `"${f.status}"`
+      rows = filteredBorrowRecords.map(f => [
+        `"${f.armsRef}"`, `"${f.fileId}"`, `"${f.transactionSeries}"`,
+        `"${f.givenName} ${f.familyName}"`, `"${f.designation}"`, `"${f.purpose}"`,
+        `"${f.requestDate}"`, `"${f.status}"`
       ]);
     } else if (activeReport === 'retention') {
       headers = ['ARMS Reference', 'Location Code', 'Transaction Type', 'GR Date', 'Retention / Disposal Due', 'Retention Lifecycle Status', 'Custodian'];
-      rows = retentionRecords.map(r => [
+      rows = filteredRetentionRecords.map(r => [
         `"${r.armsRef}"`,
         `"${r.location}"`,
         `"${r.transactionType}"`,
@@ -85,15 +102,21 @@ export const ReportsView: React.FC = () => {
       ]);
     } else if (activeReport === 'compliance') {
       headers = ['Encoding SLA / Compliance Metric', 'SLA Target', 'Actual Performance', 'Status'];
-      rows = complianceData.map(c => [
+      rows = filteredComplianceData.map(c => [
         `"${c.metric}"`,
         `"${c.target}"`,
         `"${c.actual}"`,
         `"${c.status}"`
       ]);
+    } else if (activeReport === 'storage') {
+      headers = ['Zone','Shelf','Folder','Capacity','Occupied','Occupancy'];
+      rows = (storageReport?.locations || []).map(location=>[
+        `"${location.zone}"`,`"${location.shelf}"`,`"${location.folder}"`,`"${location.max_capacity}"`,`"${location.occupied}"`,
+        `"${location.max_capacity ? Math.round(location.occupied/location.max_capacity*100) : 0}%"`
+      ]);
     } else {
       headers = ['ARMS Reference', 'Location Code', 'Zone', 'Transaction Type', 'Material Doc', 'PO/DO', 'GR Date', 'Material Number', 'Packages', 'Status', 'Custodian'];
-      rows = masterRecords.map(m => [
+      rows = filteredMasterRecords.map(m => [
         `"${m.armsRef}"`,
         `"${m.location.code}"`,
         `"${m.location.zone}"`,
@@ -138,18 +161,16 @@ export const ReportsView: React.FC = () => {
           <div className="flex items-center space-x-2 bg-slate-50 border border-slate-300 rounded-lg px-3 py-1.5 text-xs">
             <Calendar className="w-4 h-4 text-[#0A5C1D]" />
             <input
-              type="text"
+              type="date"
               value={startDate}
               onChange={e => setStartDate(e.target.value)}
-              placeholder="01 11 2026"
               className="w-20 bg-transparent text-slate-800 font-semibold focus:outline-none text-center"
             />
             <span className="text-slate-400 font-bold">to</span>
             <input
-              type="text"
+              type="date"
               value={endDate}
               onChange={e => setEndDate(e.target.value)}
-              placeholder="23 11 2026"
               className="w-20 bg-transparent text-slate-800 font-semibold focus:outline-none text-center"
             />
           </div>
@@ -203,18 +224,18 @@ export const ReportsView: React.FC = () => {
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Circulating Files</span>
               <span className="font-heading font-black text-slate-900 text-base">
-                {borrowRecords.filter(f => f.status === 'Borrowed').length} active
+                {files.filter(f => f.status === 'Borrowed').length} active
               </span>
             </div>
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Total History</span>
               <span className="font-heading font-black text-slate-900 text-base">
-                {borrowRecords.length} records
+                {filteredBorrowRecords.length} records in range
               </span>
             </div>
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Audit Inquiries</span>
-              <span className="font-heading font-black text-[#0A5C1D] text-base">100% Logged</span>
+              <span className="font-heading font-black text-[#0A5C1D] text-base">{filteredBorrowRecords.length} logged</span>
             </div>
           </div>
         </div>
@@ -307,16 +328,16 @@ export const ReportsView: React.FC = () => {
 
           <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-3 gap-2 text-xs">
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-bold">IFT Encoding Rate</span>
-              <span className="font-heading font-black text-[#0A5C1D] text-base">99.2%</span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Encoder / Day Rows</span>
+              <span className="font-heading font-black text-[#0A5C1D] text-base">{filteredComplianceData.length}</span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-bold">Avg Turnaround</span>
-              <span className="font-heading font-black text-slate-900 text-base">1.8 hrs</span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Records Encoded</span>
+              <span className="font-heading font-black text-slate-900 text-base">{files.length}</span>
             </div>
             <div>
-              <span className="text-slate-400 block text-[10px] uppercase font-bold">SLA Performance</span>
-              <span className="font-heading font-black text-emerald-700 text-base">Above Target</span>
+              <span className="text-slate-400 block text-[10px] uppercase font-bold">Shift Count Logs</span>
+              <span className="font-heading font-black text-emerald-700 text-base">{dailyLogs.length}</span>
             </div>
           </div>
         </div>
@@ -360,12 +381,24 @@ export const ReportsView: React.FC = () => {
             </div>
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Storage Grids</span>
-              <span className="font-heading font-black text-slate-900 text-base">A01 - D04</span>
+              <span className="font-heading font-black text-slate-900 text-base">{new Set(files.map(file => file.location.code)).size} locations</span>
             </div>
             <div>
               <span className="text-slate-400 block text-[10px] uppercase font-bold">Physical Sync</span>
-              <span className="font-heading font-black text-[#0A5C1D] text-base">100% Clean</span>
+              <span className="font-heading font-black text-[#0A5C1D] text-base">{files.length} records</span>
             </div>
+          </div>
+        </div>
+
+        <div onClick={() => setActiveReport('storage')} className={`p-5 rounded-xl border cursor-pointer transition-all ${activeReport === 'storage' ? 'bg-white border-[#0A5C1D] ring-2 ring-[#0A5C1D]/20 shadow-md' : 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-xs'}`}>
+          <div className="flex items-center space-x-3">
+            <div className={`w-11 h-11 rounded-xl flex items-center justify-center ${activeReport === 'storage' ? 'bg-[#0A5C1D] text-[#A8E0A8]' : 'bg-amber-50 text-amber-700'}`}><Layers className="w-6 h-6" /></div>
+            <div><h3 className="font-heading text-lg font-bold uppercase tracking-wider text-slate-900">STORAGE UTILIZATION</h3><p className="text-xs text-slate-500">Shelf capacity, occupancy, expansion alerts, and retention actions</p></div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-slate-100 grid grid-cols-3 gap-2 text-xs">
+            <div><span className="text-slate-400 block text-[10px] uppercase font-bold">Occupied</span><span className="font-heading font-black text-slate-900 text-base">{storageReport?.occupied || 0}</span></div>
+            <div><span className="text-slate-400 block text-[10px] uppercase font-bold">Capacity</span><span className="font-heading font-black text-slate-900 text-base">{storageReport?.totalCapacity || 0}</span></div>
+            <div><span className="text-slate-400 block text-[10px] uppercase font-bold">Utilization</span><span className="font-heading font-black text-amber-700 text-base">{storageReport?.occupancy || 0}%</span></div>
           </div>
         </div>
       </div>
@@ -404,17 +437,17 @@ export const ReportsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {borrowRecords.map((f, i) => (
+                {filteredBorrowRecords.map((f, i) => (
                   <tr key={i} className="hover:bg-slate-50">
                     <td className="px-3 py-2 font-bold text-[#0A5C1D]">{f.armsRef}</td>
-                    <td className="px-3 py-2 font-mono">{f.borrowInfo?.transactionSeries || 'Series 2026-PRE'}</td>
-                    <td className="px-3 py-2 font-semibold text-slate-800">{f.borrowInfo?.borrowerName || 'Staff Requisition'}</td>
-                    <td className="px-3 py-2 text-slate-600">{f.borrowInfo?.designation || 'Auditor'}</td>
-                    <td className="px-3 py-2 text-slate-700">{f.borrowInfo?.purpose || 'Audit Review'}</td>
-                    <td className="px-3 py-2 font-mono text-slate-500">{f.borrowInfo?.requestDate || f.grDate}</td>
+                    <td className="px-3 py-2 font-mono">{f.transactionSeries}</td>
+                    <td className="px-3 py-2 font-semibold text-slate-800">{f.givenName} {f.familyName}</td>
+                    <td className="px-3 py-2 text-slate-600">{f.designation}</td>
+                    <td className="px-3 py-2 text-slate-700">{f.purpose}</td>
+                    <td className="px-3 py-2 font-mono text-slate-500">{f.requestDate}</td>
                     <td className="px-3 py-2 text-right">
                       <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
-                        f.status === 'Borrowed' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
+                        f.status === 'Approved' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-700'
                       }`}>
                         {f.status}
                       </span>
@@ -439,7 +472,7 @@ export const ReportsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {retentionRecords.map((r, i) => (
+                {filteredRetentionRecords.map((r, i) => (
                   <tr key={i} className="hover:bg-slate-50">
                     <td className="px-3 py-2 font-bold text-[#0A5C1D]">{r.armsRef}</td>
                     <td className="px-3 py-2 font-mono font-bold">{r.location}</td>
@@ -477,7 +510,7 @@ export const ReportsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {complianceData.map((c, i) => (
+                {filteredComplianceData.map((c, i) => (
                   <tr key={i} className="hover:bg-slate-50">
                     <td className="px-3 py-2.5 font-semibold text-slate-900">{c.metric}</td>
                     <td className="px-3 py-2.5 font-mono text-slate-600">{c.target}</td>
@@ -508,7 +541,7 @@ export const ReportsView: React.FC = () => {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {masterRecords.slice(0, 10).map((m, i) => (
+                {filteredMasterRecords.slice(0, 10).map((m, i) => (
                   <tr key={i} className="hover:bg-slate-50">
                     <td className="px-3 py-2 font-bold text-[#0A5C1D]">{m.armsRef}</td>
                     <td className="px-3 py-2 font-mono font-bold">{m.location.code}</td>
@@ -526,6 +559,16 @@ export const ReportsView: React.FC = () => {
                 ))}
               </tbody>
             </table>
+          )}
+
+          {activeReport === 'storage' && (
+            <div className="space-y-6">
+              {currentUser?.role === 'management' && <form onSubmit={addStorageLocation} className="grid grid-cols-1 sm:grid-cols-5 gap-3 rounded-lg border border-slate-200 p-4"><input required placeholder="Zone" value={storageForm.zone} onChange={e=>setStorageForm({...storageForm,zone:e.target.value})} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /><input required placeholder="Shelf" value={storageForm.shelf} onChange={e=>setStorageForm({...storageForm,shelf:e.target.value})} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /><input required placeholder="Folder" value={storageForm.folder} onChange={e=>setStorageForm({...storageForm,folder:e.target.value})} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /><input required type="number" min="1" aria-label="Folder capacity" value={storageForm.maxCapacity} onChange={e=>setStorageForm({...storageForm,maxCapacity:Number(e.target.value)||1})} className="rounded-md border border-slate-300 px-3 py-2 text-sm" /><button className="rounded-md bg-[#0A5C1D] px-3 py-2 text-sm font-bold text-white">Configure Location</button></form>}
+              {storageReport?.expansionAlert && <div className="rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm font-semibold text-amber-900">Overall archive storage exceeds the 85% expansion threshold.</div>}
+              {!!storageReport?.shelves.some(shelf=>shelf.expansionAlert) && <div className="space-y-2">{storageReport.shelves.filter(shelf=>shelf.expansionAlert).map(shelf=><div key={`${shelf.zone}-${shelf.shelf}`} className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">Expansion alert: {shelf.zone} / {shelf.shelf} is {shelf.occupancy}% full ({shelf.occupied}/{shelf.capacity}).</div>)}</div>}
+              <div className="overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-700 uppercase font-bold"><tr><th className="px-3 py-2.5">Zone</th><th className="px-3 py-2.5">Shelf</th><th className="px-3 py-2.5">Folder</th><th className="px-3 py-2.5">Capacity</th><th className="px-3 py-2.5">Occupied</th><th className="px-3 py-2.5">Occupancy</th></tr></thead><tbody className="divide-y divide-slate-100">{(storageReport?.locations||[]).map((location,index)=><tr key={`${location.zone}-${location.shelf}-${location.folder}-${index}`}><td className="px-3 py-2">{location.zone}</td><td className="px-3 py-2">{location.shelf}</td><td className="px-3 py-2">{location.folder}</td><td className="px-3 py-2">{location.max_capacity}</td><td className="px-3 py-2">{location.occupied}</td><td className="px-3 py-2">{location.max_capacity?Math.round(location.occupied/location.max_capacity*100):0}%</td></tr>)}</tbody></table></div>
+              <div><h4 className="mb-2 font-bold uppercase tracking-wide text-slate-800">Retention reduction recommendations</h4><p className="mb-3 text-xs text-slate-500">Review oldest semi-active and near-expiry files for retention reduction or approved disposal.</p><div className="overflow-x-auto"><table className="w-full text-xs text-left"><thead className="bg-slate-50 text-slate-700 uppercase font-bold"><tr><th className="px-3 py-2">ARMS Ref.</th><th className="px-3 py-2">Location</th><th className="px-3 py-2">GR Date</th><th className="px-3 py-2">Review Reason</th><th className="px-3 py-2">Assigned Custodian</th></tr></thead><tbody className="divide-y divide-slate-100">{(storageReport?.recommendations||[]).map(record=><tr key={record.id}><td className="px-3 py-2 font-bold text-[#0A5C1D]">{record.armsRef}</td><td className="px-3 py-2">{record.location.zone} / {record.location.shelf} / {record.location.folder}</td><td className="px-3 py-2">{record.grDate}</td><td className="px-3 py-2">{record.recommendationReason}</td><td className="px-3 py-2">{record.assignedCustodian||record.custodian}</td></tr>)}</tbody></table></div></div>
+            </div>
           )}
         </div>
       </div>

@@ -2,7 +2,7 @@ export type UserRole = 'management' | 'custodian' | 'encoder' | 'admin';
 
 export interface User {
   id: string;
-  name: string; // full_name from public.profiles
+  name: string;
   email: string;
   role: UserRole;
   roleTitle: string;
@@ -39,16 +39,16 @@ export interface LineItem {
   batchCode: string;
   prodDate: string; // DD/MM/YY
   expDate: string;  // DD/MM/YY
-  quantity: string; // e.g. "25 kg" or "100 cs"
+  quantity: string;
 }
 
 export interface FileRecord {
   id: string;
-  armsRef: string; // e.g., IB2026-IFT001
+  armsRef: string;
   transactionType: TransactionType;
   materialDoc: string;
   deliveryPo: string;
-  grDate: string; // DD/MM/YY
+  grDate: string;
   materialNumber: string;
   vendorSiteNumber: string;
   vamNumber: string;
@@ -59,12 +59,12 @@ export interface FileRecord {
   checker: string;
   plateNumber: string;
   location: {
-    zone: string;    // e.g. "Zone A"
-    shelf: string;   // e.g. "Shelf 01"
-    folder: string;  // e.g. "Folder 04"
-    code: string;    // e.g. "A01"
+    zone: string;
+    shelf: string;
+    folder: string;
+    code: string;
   };
-  retentionDate: string; // DD/MM/YY
+  retentionDate: string;
   retentionStatus: RetentionStatus;
   remarks: string;
   lineItems: LineItem[];
@@ -83,11 +83,12 @@ export interface FileRecord {
   createdAt: string;
   updatedAt: string;
   custodian: string;
+  assignedCustodian?: string;
 }
 
 export interface BorrowRequest {
   id: string;
-  transactionSeries: string; // e.g. "2026-084"
+  transactionSeries: string;
   armsRef: string;
   fileId: string;
   familyName: string;
@@ -105,7 +106,7 @@ export interface NotificationItem {
   id: string;
   title: string; // "Pending Approval" or "Request Approved" or "Request Rejected"
   message: string;
-  transactionSeries: string; // "Transaction Series 2026-XXX"
+  transactionSeries: string;
   armsRef: string;
   status: 'Pending' | 'Approved' | 'Rejected' | 'System';
   isRead: boolean;
@@ -131,9 +132,35 @@ export interface DailyLogCount {
   submittedAt: string;
 }
 
+export interface LogEntry {
+  id: string;
+  uniqueCode: string;
+  transactionType: TransactionType;
+  materialNumber: string;
+  materialDescription: string;
+  date: string;
+  po: string;
+  drInvNumber: string;
+  proNumber: string;
+  vamNumber: string;
+  plateNumber: string;
+  operator: string;
+  materialCondition: 'OK' | 'NOT OK' | '';
+  truckCvCondition: 'OK' | 'NOT OK' | '';
+  noInfestation: 'OK' | 'NOT OK' | '';
+  truckCvOdor: 'OK' | 'NOT OK' | '';
+  truckCvSeal: 'OK' | 'NOT OK' | '';
+  gateIn: string;
+  unloadingStart: string;
+  unloadingEnd: string;
+  dwellMinutes: number | null;
+  createdBy: string;
+  createdAt: string;
+}
+
 export interface ActivityItem {
   id: string;
-  type: 'upload' | 'borrow' | 'approval' | 'return' | 'log_count' | 'reject' | 'login' | 'logout';
+  type: 'upload' | 'borrow' | 'approval' | 'return' | 'log_count' | 'log_entry' | 'reject' | 'login' | 'logout';
   title: string;
   description: string;
   armsRef?: string;
@@ -142,4 +169,4 @@ export interface ActivityItem {
   statusBadge?: string;
 }
 
-export type ReportType = 'borrow' | 'retention' | 'compliance' | 'documents';
+export type ReportType = 'borrow' | 'retention' | 'compliance' | 'documents' | 'storage';

@@ -1,11 +1,6 @@
 import React, { useState } from 'react';
 import { useApp } from '../../context/AppContext';
 import {
-  ACTIVITY_7DAYS,
-  CATEGORY_BREAKDOWN,
-  TRANSACTION_PROGRESS_METRICS
-} from '../../mock/seedData';
-import {
   FileText,
   Clock,
   FolderMinus,
@@ -25,18 +20,38 @@ import {
 } from 'lucide-react';
 
 export const DashboardView: React.FC = () => {
-  const { kpiMetrics, activities, activeUsers, files, setActiveTab, currentUser } = useApp();
-  const [hoveredDay, setHoveredDay] = useState<typeof ACTIVITY_7DAYS[0] | null>(null);
-  const [hoveredSlice, setHoveredSlice] = useState<typeof CATEGORY_BREAKDOWN[0] | null>(null);
+  const { kpiMetrics, activities, activeUsers, files, borrowRequests, setActiveTab, currentUser } = useApp();
+  const categoryColors = ['#0A5C1D', '#1B8A2F', '#2FA848', '#A8E0A8', '#222222'];
+  const categoryCounts = new Map<string, number>();
+  files.forEach(file => categoryCounts.set(file.transactionType, (categoryCounts.get(file.transactionType) || 0) + 1));
+  const categoryBreakdown = Array.from(categoryCounts, ([name, count], index) => ({
+    name, count, percentage: files.length ? Math.round(count / files.length * 100) : 0, color: categoryColors[index % categoryColors.length]
+  }));
+  const transactionCounts = new Map<string, number>();
+  files.forEach(file => transactionCounts.set(file.transactionType, (transactionCounts.get(file.transactionType) || 0) + 1));
+  const maxTransactionCount = Math.max(1, ...transactionCounts.values());
+  const transactionMetrics = Array.from(transactionCounts, ([label, count]) => ({ label, count, percent: Math.round(count / maxTransactionCount * 100) }));
+  const activityByDay: { day: string; uploads: number; borrows: number; label: string }[] = Array.from({ length: 7 }, (_, offset) => {
+    const date = new Date(); date.setDate(date.getDate() - (6 - offset));
+    const dateKey = date.toISOString().slice(0, 10);
+    const uploads = files.filter(file => file.createdAt?.slice(0, 10) === dateKey).length;
+    const borrows = borrowRequests.filter(request => {
+      const parsedDate = new Date(request.requestDate);
+      return !Number.isNaN(parsedDate.getTime()) && parsedDate.toISOString().slice(0, 10) === dateKey;
+    }).length;
+    return { day: date.toLocaleDateString(undefined, { weekday: 'short', day: 'numeric' }), uploads, borrows, label: `${uploads} uploads · ${borrows} borrows` };
+  });
+  const [hoveredDay, setHoveredDay] = useState<(typeof activityByDay)[number] | null>(null);
+  const [hoveredSlice, setHoveredSlice] = useState<(typeof categoryBreakdown)[number] | null>(null);
 
   // SVG dimensions for 7-day chart
   const chartHeight = 180;
   const chartWidth = 500;
-  const maxVal = 80;
+  const maxVal = Math.max(1, ...activityByDay.map(day => day.uploads));
 
   // Compute SVG line points for borrows
-  const points = ACTIVITY_7DAYS.map((d, i) => {
-    const x = 35 + i * ((chartWidth - 70) / (ACTIVITY_7DAYS.length - 1));
+  const points = activityByDay.map((d, i) => {
+    const x = 35 + i * ((chartWidth - 70) / Math.max(1, activityByDay.length - 1));
     const y = chartHeight - 30 - (d.borrows / 15) * (chartHeight - 60);
     return `${x},${y}`;
   }).join(' ');
@@ -131,7 +146,7 @@ export const DashboardView: React.FC = () => {
           </div>
         </div>
 
-        {/* KPI 4: Active Users (Realtime Presence) */}
+        {/* KPI 4: Active Local Sessions */}
         <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200 hover:shadow-md transition-shadow">
           <div className="flex items-start justify-between">
             <div>
@@ -154,7 +169,7 @@ export const DashboardView: React.FC = () => {
               <Radio className="w-3 h-3 mr-1 text-emerald-600 animate-pulse" />
               {kpiMetrics.activeUsersDelta}
             </span>
-            <span className="text-[11px] text-slate-400">Supabase Presence</span>
+            <span className="text-[11px] text-slate-400">Local sessions</span>
           </div>
         </div>
       </div>
@@ -219,9 +234,9 @@ export const DashboardView: React.FC = () => {
               })}
 
               {/* Grouped Bars: Uploads */}
-              {ACTIVITY_7DAYS.map((d, i) => {
+              {activityByDay.map((d, i) => {
                 const barWidth = 24;
-                const x = 35 + i * ((chartWidth - 70) / (ACTIVITY_7DAYS.length - 1)) - barWidth / 2;
+                const x = 35 + i * ((chartWidth - 70) / Math.max(1, activityByDay.length - 1)) - barWidth / 2;
                 const barHeight = (d.uploads / maxVal) * (chartHeight - 60);
                 const y = chartHeight - 30 - barHeight;
                 const isHovered = hoveredDay?.day === d.day;
@@ -283,8 +298,8 @@ export const DashboardView: React.FC = () => {
                 points={points}
               />
 
-              {ACTIVITY_7DAYS.map((d, i) => {
-                const x = 35 + i * ((chartWidth - 70) / (ACTIVITY_7DAYS.length - 1));
+              {activityByDay.map((d, i) => {
+                const x = 35 + i * ((chartWidth - 70) / Math.max(1, activityByDay.length - 1));
                 const y = chartHeight - 30 - (d.borrows / 15) * (chartHeight - 60);
                 const isHovered = hoveredDay?.day === d.day;
 
@@ -315,7 +330,7 @@ export const DashboardView: React.FC = () => {
                 )}
               </div>
               <div className="font-semibold text-[#0A5C1D]">
-                Peak: Fri 21 (72 txns)
+                {activityByDay.some(day => day.uploads || day.borrows) ? `Peak: ${activityByDay.reduce((peak, day) => day.uploads > peak.uploads ? day : peak).day}` : 'No activity data'}
               </div>
             </div>
           </div>
@@ -334,7 +349,7 @@ export const DashboardView: React.FC = () => {
             {/* SVG Donut */}
             <div className="relative flex items-center justify-center my-2">
               <svg viewBox="0 0 160 160" className="w-40 h-40 transform -rotate-90">
-                {CATEGORY_BREAKDOWN.map((cat, i) => {
+                {categoryBreakdown.map((cat, i) => {
                   const strokeDasharray = `${(cat.percentage / 100) * donutCircumference} ${donutCircumference}`;
                   const strokeDashoffset = -((cumulativePercent / 100) * donutCircumference);
                   cumulativePercent += cat.percentage;
@@ -362,7 +377,7 @@ export const DashboardView: React.FC = () => {
               {/* Center Stat */}
               <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
                 <div className="text-2xl font-heading font-black text-slate-900">
-                  {hoveredSlice ? `${hoveredSlice.percentage}%` : '1,205'}
+                  {hoveredSlice ? `${hoveredSlice.percentage}%` : files.length.toLocaleString()}
                 </div>
                 <div className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
                   {hoveredSlice ? hoveredSlice.name : 'TOTAL FILES'}
@@ -373,7 +388,7 @@ export const DashboardView: React.FC = () => {
 
           {/* Breakdown Legend */}
           <div className="mt-4 space-y-1.5 pt-3 border-t border-slate-100">
-            {CATEGORY_BREAKDOWN.map((item, idx) => (
+            {categoryBreakdown.map((item, idx) => (
               <div
                 key={idx}
                 onMouseEnter={() => setHoveredSlice(item)}
@@ -417,7 +432,7 @@ export const DashboardView: React.FC = () => {
           </div>
 
           <div className="space-y-4">
-            {TRANSACTION_PROGRESS_METRICS.map((item, idx) => (
+            {transactionMetrics.map((item, idx) => (
               <div key={idx} className="space-y-1.5">
                 <div className="flex justify-between items-center text-xs">
                   <span className="font-medium text-slate-700 truncate pr-2">
@@ -528,7 +543,7 @@ export const DashboardView: React.FC = () => {
               <Calendar className="w-8 h-8 mx-auto mb-2 opacity-30 text-[#0A5C1D]" />
               <p className="text-xs font-semibold text-slate-600">No activity logs recorded yet</p>
               <p className="text-[11px] text-slate-400 mt-1">
-                Actions by authenticated users will stream here live via Supabase Realtime.
+                Recent actions are saved locally and refresh automatically.
               </p>
             </div>
           )}

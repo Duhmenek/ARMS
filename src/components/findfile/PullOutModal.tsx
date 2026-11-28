@@ -18,12 +18,12 @@ export const PullOutModal: React.FC<PullOutModalProps> = ({
 }) => {
   const { files, submitBorrowRequest } = useApp();
 
-  const [date, setDate] = useState('23/11/2026');
+  const [date, setDate] = useState(new Date().toISOString().slice(0,10));
   const [selectedArmsRef, setSelectedArmsRef] = useState(preSelectedRef || '');
-  const [familyName, setFamilyName] = useState('Villanueva');
-  const [givenName, setGivenName] = useState('Clarissa');
-  const [designation, setDesignation] = useState('Quality Assurance Specialist');
-  const [purpose, setPurpose] = useState('Nestle Internal Audit');
+  const [familyName, setFamilyName] = useState('');
+  const [givenName, setGivenName] = useState('');
+  const [designation, setDesignation] = useState('');
+  const [purpose, setPurpose] = useState('');
 
   if (!isOpen) return null;
 
@@ -80,14 +80,13 @@ export const PullOutModal: React.FC<PullOutModalProps> = ({
             <div>
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5 flex items-center space-x-1.5">
                 <Calendar className="w-3.5 h-3.5 text-[#0A5C1D]" />
-                <span>Select Date (DD/MM/YYYY)</span>
+                <span>Request Date</span>
               </label>
               <input
-                type="text"
+                type="date"
                 required
                 value={date}
                 onChange={e => setDate(e.target.value)}
-                placeholder="23/11/2026"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A5C1D]"
               />
             </div>
@@ -123,7 +122,7 @@ export const PullOutModal: React.FC<PullOutModalProps> = ({
                 required
                 value={givenName}
                 onChange={e => setGivenName(e.target.value)}
-                placeholder="e.g. Clarissa"
+                placeholder="Given name"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A5C1D]"
               />
             </div>
@@ -137,7 +136,7 @@ export const PullOutModal: React.FC<PullOutModalProps> = ({
                 required
                 value={familyName}
                 onChange={e => setFamilyName(e.target.value)}
-                placeholder="e.g. Villanueva"
+                placeholder="Family name"
                 className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A5C1D]"
               />
             </div>
@@ -153,7 +152,7 @@ export const PullOutModal: React.FC<PullOutModalProps> = ({
               required
               value={designation}
               onChange={e => setDesignation(e.target.value)}
-              placeholder="e.g. Lead QA Compliance Inspector"
+              placeholder="Designation"
               className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-[#0A5C1D]"
             />
           </div>
@@ -163,17 +162,14 @@ export const PullOutModal: React.FC<PullOutModalProps> = ({
             <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 mb-1.5">
               Purpose <span className="text-rose-500">*</span>
             </label>
-            <select
+            <input
+              type="text"
+              required
               value={purpose}
               onChange={e => setPurpose(e.target.value)}
+              placeholder="Purpose of request"
               className="w-full px-3.5 py-2.5 rounded-lg border border-slate-300 text-sm font-medium text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0A5C1D]"
-            >
-              <option value="Nestle Internal Audit">Nestle Internal Audit</option>
-              <option value="Incident Investigation">Incident Investigation</option>
-              <option value="Internal Market SHE Audit">Internal Market SHE Audit</option>
-              <option value="Halal Audit">Halal Audit</option>
-              <option value="Nestle Customer Audit">Nestle Customer Audit</option>
-            </select>
+            />
           </div>
 
           <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-xs text-amber-800 flex items-start space-x-2">

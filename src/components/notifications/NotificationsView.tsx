@@ -155,7 +155,7 @@ export const NotificationsView: React.FC = () => {
                 type="text"
                 value={searchQuery}
                 onChange={e => setSearchQuery(e.target.value)}
-                placeholder="Search series, reference, name..."
+                placeholder="Search transaction series, reference, or borrower"
                 className="w-full pl-9 pr-3 py-1.5 rounded-lg border border-slate-300 text-xs focus:outline-none focus:ring-2 focus:ring-[#0A5C1D]"
               />
             </div>
@@ -319,7 +319,7 @@ export const NotificationsView: React.FC = () => {
 
                 {/* Right: Transaction Series + Actions */}
                 <div className="flex flex-row sm:flex-col sm:items-end justify-between items-center space-y-0 sm:space-y-2 flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
-                  {/* Right-aligned "Transaction Series 2026-XXX" */}
+                  {/* Right-aligned transaction series */}
                   <div className="font-heading font-black text-xs uppercase tracking-wider text-slate-600 bg-slate-100 px-2.5 py-1 rounded-md border border-slate-200">
                     {notif.transactionSeries}
                   </div>

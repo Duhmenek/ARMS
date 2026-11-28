@@ -1,0 +1,4 @@
+Microsoft Access encountered an error while importing the object 'AutoExec'.
+
+Error encountered at line 4.
+Expected: '='.  Found: Name.

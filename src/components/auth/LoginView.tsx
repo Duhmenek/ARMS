@@ -9,6 +9,14 @@ export const LoginView: React.FC = () => {
   const [showForgotModal, setShowForgotModal] = useState(false);
   const [forgotEmail, setForgotEmail] = useState('');
   const [forgotStatus, setForgotStatus] = useState<string | null>(null);
+  const [setupRequired, setSetupRequired] = useState(false);
+
+  React.useEffect(() => {
+    fetch('/api/health', { credentials: 'same-origin' })
+      .then(response => response.ok ? response.json() : null)
+      .then(data => { if (data) setSetupRequired(Boolean(data.setupRequired)); })
+      .catch(() => setSetupRequired(false));
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -26,18 +34,7 @@ export const LoginView: React.FC = () => {
 
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    const targetEmail = forgotEmail || email;
-    if (!targetEmail) return;
-    try {
-      await resetPassword(targetEmail);
-      setForgotStatus(`Password recovery instructions sent to ${targetEmail}`);
-      setTimeout(() => {
-        setShowForgotModal(false);
-        setForgotStatus(null);
-      }, 3000);
-    } catch (err: any) {
-      setForgotStatus(err.message || 'Failed to send password recovery instructions');
-    }
+    setForgotStatus('Contact your ARMS administrator to reset a local account password.');
   };
 
   return (
@@ -52,6 +49,11 @@ export const LoginView: React.FC = () => {
       {/* Centered Minimalist White Card */}
       <main className="flex-1 flex items-center justify-center px-4 sm:px-6 -mt-12">
         <div className="w-full max-w-[420px] bg-white rounded-xl shadow-[0_4px_24px_rgba(0,0,0,0.06)] border border-slate-200/80 p-8 sm:p-10">
+          {setupRequired && (
+            <div className="mb-5 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-relaxed text-amber-900">
+              First-time setup: on the host computer, run <code className="font-bold">npm run setup:users</code> in a terminal to create the local Management and Custodian accounts.
+            </div>
+          )}
           {authError && (
             <div className="mb-5 p-3 rounded-lg bg-rose-50 border border-rose-200 text-xs text-rose-700 leading-snug">
               {authError}
@@ -65,15 +67,15 @@ export const LoginView: React.FC = () => {
                 htmlFor="email"
                 className="block text-xs font-semibold uppercase tracking-wider text-slate-700 mb-2"
               >
-                Email Address
+                Local Username
               </label>
               <input
                 id="email"
-                type="email"
+                type="text"
                 required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="name@company.com"
+                placeholder="management or custodian"
                 autoComplete="email"
                 className="w-full px-4 py-3 bg-white border border-slate-300 rounded-lg text-sm text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-[#0A5C1D] focus:border-transparent transition-all"
               />
@@ -138,7 +140,7 @@ export const LoginView: React.FC = () => {
               Reset Password
             </h3>
             <p className="text-xs text-slate-500 mb-4">
-              Enter your registered corporate email to receive a password reset link from Supabase.
+              Local account passwords are reset by the ARMS administrator on the host computer.
             </p>
 
             {forgotStatus ? (
@@ -149,14 +151,14 @@ export const LoginView: React.FC = () => {
               <form onSubmit={handleForgotPassword} className="space-y-4">
                 <div>
                   <label className="block text-xs font-semibold text-slate-700 mb-1">
-                    Email Address
+                    Local Username
                   </label>
                   <input
-                    type="email"
+                    type="text"
                     required
                     value={forgotEmail}
                     onChange={e => setForgotEmail(e.target.value)}
-                    placeholder="name@company.com"
+                    placeholder="Local account username"
                     className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs text-slate-900 focus:outline-none focus:ring-2 focus:ring-[#0A5C1D]"
                   />
                 </div>
@@ -172,7 +174,7 @@ export const LoginView: React.FC = () => {
                     type="submit"
                     className="w-1/2 py-2 text-xs font-bold uppercase tracking-wider text-white bg-[#1E1E1E] rounded-lg hover:bg-black"
                   >
-                    Send Link
+                    Contact Admin
                   </button>
                 </div>
               </form>
