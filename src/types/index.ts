@@ -40,6 +40,10 @@ export interface LineItem {
   prodDate: string; // DD/MM/YY
   expDate: string;  // DD/MM/YY
   quantity: string;
+  blockSide?: 'left' | 'right';
+  rowNumber?: number;
+  sap?: string;
+  plCoi?: string;
 }
 
 export interface FileRecord {
@@ -50,6 +54,7 @@ export interface FileRecord {
   deliveryPo: string;
   grDate: string;
   materialNumber: string;
+  materialDescription?: string;
   vendorSiteNumber: string;
   vamNumber: string;
   freightOrder: string;
@@ -84,6 +89,7 @@ export interface FileRecord {
   updatedAt: string;
   custodian: string;
   assignedCustodian?: string;
+  archivedLogEntry?: LogEntry;
 }
 
 export interface BorrowRequest {
@@ -145,6 +151,39 @@ export interface LogEntry {
   vamNumber: string;
   plateNumber: string;
   operator: string;
+  materialCondition: 'OK' | 'NOT OK' | '' | null;
+  truckCvCondition: 'OK' | 'NOT OK' | '' | null;
+  noInfestation: 'OK' | 'NOT OK' | '' | null;
+  truckCvOdor: 'OK' | 'NOT OK' | '' | null;
+  truckCvSeal: 'OK' | 'NOT OK' | '' | null;
+  gateIn: string | null;
+  unloadingStart: string | null;
+  unloadingEnd: string | null;
+  dwellMinutes: number | null;
+  batchDetails: { left: LogEntryBatchRow[]; right: LogEntryBatchRow[] };
+  breakdown: { left: LogEntryBreakdown; right: LogEntryBreakdown };
+  remarks: string;
+  status: 'Pre-Print' | 'Archived';
+  createdBy: string;
+  createdAt: string;
+}
+
+export interface LogEntryBatchRow {
+  batchCode: string;
+  mfgDate: string;
+  sap: string;
+  plCoi: string;
+  sledExp: string;
+}
+
+export interface LogEntryBreakdown {
+  bagsPerPallet: string;
+  palletsUsed: string;
+  weightPerBag: string;
+  totalQuantity: string;
+}
+
+export interface LogEntryCompletionInput {
   materialCondition: 'OK' | 'NOT OK' | '';
   truckCvCondition: 'OK' | 'NOT OK' | '';
   noInfestation: 'OK' | 'NOT OK' | '';
@@ -153,10 +192,15 @@ export interface LogEntry {
   gateIn: string;
   unloadingStart: string;
   unloadingEnd: string;
-  dwellMinutes: number | null;
-  createdBy: string;
-  createdAt: string;
+  batchDetails: { left: LogEntryBatchRow[]; right: LogEntryBatchRow[] };
+  breakdown: { left: LogEntryBreakdown; right: LogEntryBreakdown };
+  remarks: string;
 }
+
+export type LogEntryCreateInput = Pick<LogEntry,
+  'transactionType' | 'materialNumber' | 'materialDescription' | 'date' | 'po' |
+  'drInvNumber' | 'proNumber' | 'vamNumber' | 'plateNumber' | 'operator'
+>;
 
 export interface ActivityItem {
   id: string;

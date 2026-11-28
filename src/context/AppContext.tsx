@@ -1,6 +1,6 @@
 import React, { createContext, useCallback, useContext, useEffect, useState } from 'react';
 import { api, json } from '../services/api';
-import { FileRecord, NotificationItem, DailyLogCount, LogEntry, ActivityItem, ActiveUserPresence, User, BorrowRequest } from '../types';
+import { FileRecord, NotificationItem, DailyLogCount, LogEntry, LogEntryCreateInput, LogEntryCompletionInput, ActivityItem, ActiveUserPresence, User, BorrowRequest } from '../types';
 
 interface AppContextType {
   currentUser: User | null; isAuthenticated: boolean; authLoading: boolean; authError: string | null;
@@ -12,7 +12,7 @@ interface AppContextType {
   addFileRecord: (data: any) => Promise<FileRecord>; updateFileRecord: (id: string, updates: Partial<FileRecord>) => Promise<void>;
   deleteFileRecord: (id: string) => Promise<void>; returnBorrowedFile: (armsRef: string) => Promise<void>;
   submitBorrowRequest: (params: {armsRef:string;familyName:string;givenName:string;designation:string;purpose:string;date:string}) => Promise<{transactionSeries:string;armsRef:string}>;
-  logEntries: LogEntry[]; createLogEntry: (entry: Omit<LogEntry,'id'|'uniqueCode'|'createdBy'|'createdAt'|'dwellMinutes'>) => Promise<LogEntry>;
+  logEntries: LogEntry[]; createLogEntry: (entry: LogEntryCreateInput) => Promise<LogEntry>; archiveLogEntry: (id:string,completion:LogEntryCompletionInput)=>Promise<LogEntry>;
   approveBorrowRequest: (notificationId: string) => Promise<void>; rejectBorrowRequest: (notificationId: string) => Promise<void>;
   notifications: NotificationItem[]; unreadCount: number; markNotificationRead: (id:string)=>Promise<void>;
   markAllNotificationsRead: ()=>Promise<void>; toggleStarNotification: (id:string)=>Promise<void>; deleteNotification: (id:string)=>Promise<void>;
@@ -83,12 +83,13 @@ export const AppProvider: React.FC<{children:React.ReactNode}> = ({children}) =>
   const toggleStarNotification=async(id:string)=>{const item=notifications.find(n=>n.id===id);if(!item)return;await api(`/private/notifications/${encodeURIComponent(id)}`,json('PATCH',{isStarred:!item.isStarred}));await refreshData();};
   const deleteNotification=async(id:string)=>{await api(`/private/notifications/${encodeURIComponent(id)}`,json('DELETE'));await refreshData();};
   const addDailyLog=async(data:Omit<DailyLogCount,'id'|'submittedAt'>)=>{await api('/private/log-counts',json('POST',data));await refreshData();showToast(`Shift log counts recorded for ${data.date}`);};
-  const createLogEntry=async(entry:Omit<LogEntry,'id'|'uniqueCode'|'createdBy'|'createdAt'|'dwellMinutes'>):Promise<LogEntry>=>{const saved=await api<LogEntry>('/private/log-entries',json('POST',entry));await refreshData();showToast(`Pre-Print Form ${saved.uniqueCode} saved`);return saved;};
+  const createLogEntry=async(entry:LogEntryCreateInput):Promise<LogEntry>=>{const saved=await api<LogEntry>('/private/log-entries',json('POST',entry));await refreshData();showToast(`Pre-Print Form ${saved.uniqueCode} saved`);return saved;};
+  const archiveLogEntry=async(id:string,completion:LogEntryCompletionInput):Promise<LogEntry>=>{const saved=await api<LogEntry>(`/private/log-entries/${encodeURIComponent(id)}/archive`,json('POST',completion));await refreshData();showToast(`Authority to Receive ${saved.uniqueCode} archived`);return saved;};
 
   const borrowed=files.filter(file=>file.status==='Borrowed').length;
   const pendingForLog=dailyLogs[0]?dailyLogs[0].inbound+dailyLogs[0].outbound+dailyLogs[0].scrap+dailyLogs[0].inventory:0;
   const kpiMetrics={transactions:files.length,pendingForLog,borrowed,activeUsers:activeUsers.length,transactionsDelta:'Live local data',pendingForLogDelta:'Live local data',borrowedDelta:'Live local data',activeUsersDelta:`${activeUsers.length} online`};
-  const value:AppContextType={currentUser,isAuthenticated:!!currentUser,authLoading,authError,clearAuthError,login,logout,resetPassword,activeTab,setActiveTab,sidebarOpen,setSidebarOpen,files,borrowRequests,addFileRecord,updateFileRecord,deleteFileRecord,returnBorrowedFile,submitBorrowRequest,approveBorrowRequest,rejectBorrowRequest,notifications,unreadCount:notifications.filter(n=>!n.isRead).length,markNotificationRead,markAllNotificationsRead,toggleStarNotification,logEntries,createLogEntry,deleteNotification,dailyLogs,addDailyLog,activities,activeUsers,kpiMetrics,toastMessage,showToast};
+  const value:AppContextType={currentUser,isAuthenticated:!!currentUser,authLoading,authError,clearAuthError,login,logout,resetPassword,activeTab,setActiveTab,sidebarOpen,setSidebarOpen,files,borrowRequests,addFileRecord,updateFileRecord,deleteFileRecord,returnBorrowedFile,submitBorrowRequest,approveBorrowRequest,rejectBorrowRequest,notifications,unreadCount:notifications.filter(n=>!n.isRead).length,markNotificationRead,markAllNotificationsRead,toggleStarNotification,logEntries,createLogEntry,archiveLogEntry,deleteNotification,dailyLogs,addDailyLog,activities,activeUsers,kpiMetrics,toastMessage,showToast};
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 export const useApp=()=>{const context=useContext(AppContext);if(!context)throw new Error('useApp must be used within an AppProvider');return context;};

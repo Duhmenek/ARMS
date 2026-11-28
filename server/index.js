@@ -26,15 +26,37 @@ app.use(express.json({ limit: '1mb' }));
 const uuid = () => crypto.randomUUID();
 const hashToken = value => crypto.createHash('sha256').update(value).digest('hex');
 const userView = user => ({ id:user.id, name:user.full_name, email:user.email, role:user.role, roleTitle:user.role_title, department:user.department });
+const blankBatchRow = () => ({batchCode:'',mfgDate:'',sap:'',plCoi:'',sledExp:''});
+const blankBreakdown = () => ({bagsPerPallet:'',palletsUsed:'',weightPerBag:'',totalQuantity:''});
+const parseJson = (value, fallback) => { try { return JSON.parse(value); } catch { return fallback; } };
+const mapLogEntry = row => {
+  const batches=parseJson(row.batch_details,{left:[],right:[]});
+  const breakdown=parseJson(row.breakdown_data,{left:{},right:{}});
+  const normalizeRows=side=>Array.from({length:3},(_,index)=>({...blankBatchRow(),...(Array.isArray(batches?.[side])?batches[side][index]:{})}));
+  const normalizeBreakdown=side=>({...blankBreakdown(),...(breakdown?.[side]||{})});
+  return {
+    id:row.id,uniqueCode:row.unique_code,transactionType:row.transaction_type,materialNumber:row.material_number,
+    materialDescription:row.material_description,date:row.gr_date,po:row.po,drInvNumber:row.dr_inv_number,
+    proNumber:row.pro_number,vamNumber:row.vam_number,plateNumber:row.plate_number,operator:row.operator,
+    materialCondition:row.inspection_material_condition,truckCvCondition:row.inspection_truck_cv_condition,
+    noInfestation:row.inspection_no_infestation,truckCvOdor:row.inspection_truck_cv_odor,truckCvSeal:row.inspection_truck_cv_seal,
+    gateIn:row.delivery_truck_gate_in,unloadingStart:row.delivery_truck_unloading_start,
+    unloadingEnd:row.delivery_truck_unloading_end,dwellMinutes:row.delivery_truck_dwell_minutes,
+    batchDetails:{left:normalizeRows('left'),right:normalizeRows('right')},
+    breakdown:{left:normalizeBreakdown('left'),right:normalizeBreakdown('right')},
+    remarks:row.remarks||'',status:row.status||'Pre-Print',createdBy:row.created_by_name||'',createdAt:row.created_at,
+  };
+};
 const recordView = row => ({
   id: row.id, armsRef: row.arms_ref, transactionType: row.transaction_type, materialDoc: row.material_doc,
-  deliveryPo: row.delivery_po, grDate: row.gr_date, materialNumber: row.material_number,
+  deliveryPo: row.delivery_po, grDate: row.gr_date, materialNumber: row.material_number, materialDescription:row.material_description||'',
   vendorSiteNumber: row.vendor_site_number, vamNumber: row.vam_number, freightOrder: row.freight_order,
   numPackages: row.num_packages, operator: row.operator, encoder: row.encoder, checker: row.checker,
   plateNumber: row.plate_number,
   location: { zone: row.zone || '', shelf: row.shelf || '', folder: row.folder || '', code: row.location_code || '' },
   retentionDate: row.retention_date, retentionStatus: row.retention_status, remarks: row.remarks,
-  lineItems: db.prepare('SELECT id,batch_code as batchCode,prod_date as prodDate,exp_date as expDate,quantity FROM record_batches WHERE record_id=?').all(row.id),
+  lineItems: db.prepare('SELECT id,batch_code as batchCode,prod_date as prodDate,exp_date as expDate,quantity,block_side as blockSide,row_number as rowNumber,sap,pl_coi as plCoi FROM record_batches WHERE record_id=? ORDER BY block_side,row_number,id').all(row.id),
+  archivedLogEntry: (()=>{const archived=db.prepare(`SELECT e.*,u.full_name AS created_by_name FROM log_entries e JOIN users u ON u.id=e.created_by WHERE e.unique_code=? AND e.status='Archived'`).get(row.arms_ref);return archived?mapLogEntry(archived):undefined;})(),
   borrowInfo: (()=>{const request=db.prepare("SELECT * FROM borrow_requests WHERE record_id=? AND status IN ('Approved','Returned') ORDER BY created_at DESC LIMIT 1").get(row.id);return request?{borrowerName:`${request.given_name} ${request.family_name}`,familyName:request.family_name,givenName:request.given_name,designation:request.designation,purpose:request.purpose,requestDate:request.request_date,approvedDate:request.approved_date||undefined,transactionSeries:request.transaction_series,approvedBy:request.approved_by||undefined}:undefined;})(),
   status: row.status, custodian: row.custodian, assignedCustodian: row.assigned_custodian,
   createdAt: row.created_at, updatedAt: row.updated_at,
@@ -165,7 +187,7 @@ app.get('/api/private/data', (req,res) => {
   const requests = db.prepare('SELECT * FROM borrow_requests ORDER BY created_at DESC').all().map(mapRequest);
   const notifications = db.prepare('SELECT * FROM notifications ORDER BY created_at DESC').all().map(mapNotification);
   const dailyLogs = db.prepare('SELECT * FROM log_counts ORDER BY created_at DESC').all().map(r=>({ id:r.id,date:r.date,inbound:r.inbound,outbound:r.outbound,scrap:r.scrap,inventory:r.inventory,rhTemp:r.rh_temp,rackInspections:r.rack_inspections,mhePreOps:r.mhe_pre_ops,submittedBy:r.submitted_by,submittedAt:r.created_at }));
-  const logEntries = db.prepare('SELECT e.*,u.full_name AS created_by_name FROM log_entries e JOIN users u ON u.id=e.created_by ORDER BY e.created_at DESC,e.rowid DESC').all().map(r=>({ id:r.id,uniqueCode:r.unique_code,transactionType:r.transaction_type,materialNumber:r.material_number,materialDescription:r.material_description,date:r.gr_date,po:r.po,drInvNumber:r.dr_inv_number,proNumber:r.pro_number,vamNumber:r.vam_number,plateNumber:r.plate_number,operator:r.operator,materialCondition:r.material_condition,truckCvCondition:r.truck_cv_condition,noInfestation:r.no_infestation,truckCvOdor:r.truck_cv_odor,truckCvSeal:r.truck_cv_seal,gateIn:r.gate_in,unloadingStart:r.unloading_start,unloadingEnd:r.unloading_end,dwellMinutes:r.dwell_minutes,createdBy:r.created_by_name,createdAt:r.created_at }));
+  const logEntries = db.prepare('SELECT e.*,u.full_name AS created_by_name FROM log_entries e JOIN users u ON u.id=e.created_by ORDER BY e.created_at DESC,e.rowid DESC').all().map(mapLogEntry);
   const activities = db.prepare('SELECT * FROM activity_logs ORDER BY created_at DESC LIMIT 100').all().map(mapActivity);
   const activeUsers = db.prepare('SELECT DISTINCT u.id,u.full_name,u.email,u.role,s.last_seen_at FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.expires_at>CURRENT_TIMESTAMP AND s.last_seen_at>=datetime(\'now\',\'-2 minutes\')').all().map(u=>({ userId:u.id,name:u.full_name,email:u.email,role:u.role,onlineAt:u.last_seen_at }));
   res.json({ user:req.user, records, requests, notifications, dailyLogs, logEntries, activities, activeUsers });
@@ -223,17 +245,20 @@ app.post('/api/private/log-counts', (req,res) => {
 app.post('/api/private/log-entries', (req,res) => {
   const input=req.body||{};
   const transactionType=String(input.transactionType||'').trim();
-  if(!transactionType) return res.status(400).json({error:'Select Transaction is required'});
-  const conditionFields=['materialCondition','truckCvCondition','noInfestation','truckCvOdor','truckCvSeal'];
-  if(conditionFields.some(name=>!['OK','NOT OK'].includes(input[name]))) return res.status(400).json({error:'Choose OK or NOT OK for each inspection condition'});
-  const gateIn=String(input.gateIn||'').trim();
-  const unloadingStart=String(input.unloadingStart||'').trim();
-  const unloadingEnd=String(input.unloadingEnd||'').trim();
-  const validTime=value=>value===''||/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
-  if(![gateIn,unloadingStart,unloadingEnd].every(validTime)) return res.status(400).json({error:'Enter valid truck times in HH:MM format'});
-  const clockMinutes=value=>value?Number(value.slice(0,2))*60+Number(value.slice(3,5)):null;
-  let dwellMinutes=null;
-  if(gateIn&&unloadingEnd){dwellMinutes=clockMinutes(unloadingEnd)-clockMinutes(gateIn);if(dwellMinutes<0)dwellMinutes+=24*60;}
+  const required=[
+    ['Select Transaction',transactionType],
+    ['MATERIAL No.',input.materialNumber],
+    ['MATERIAL DESCRIPTION',input.materialDescription],
+    ['DATE',input.date],
+    ['DR/INV No.',input.drInvNumber],
+    ['VAM No.',input.vamNumber],
+    ['Operator',input.operator],
+    ['PO / OBD No.',input.po],
+    ['PRO No. (PRD No.)',input.proNumber],
+    ['PL/CV No.',input.plateNumber],
+  ];
+  const missing=required.filter(([,value])=>!String(value??'').trim()).map(([label])=>label);
+  if(missing.length) return res.status(400).json({error:`Complete all required fields: ${missing.join(', ')}`});
   const fields={
     materialNumber:String(input.materialNumber||'').trim(),
     materialDescription:String(input.materialDescription||'').trim(),
@@ -244,12 +269,6 @@ app.post('/api/private/log-entries', (req,res) => {
     operator:String(input.operator||'').trim(),
     vamNumber:String(input.vamNumber||'').trim(),
     plateNumber:String(input.plateNumber||'').trim(),
-    materialCondition:input.materialCondition,
-    truckCvCondition:input.truckCvCondition,
-    noInfestation:input.noInfestation,
-    truckCvOdor:input.truckCvOdor,
-    truckCvSeal:input.truckCvSeal,
-    gateIn,unloadingStart,unloadingEnd,dwellMinutes,
   };
   const create=db.transaction(()=>{
     const day=new Date().toISOString().slice(0,10).replace(/-/g,'');
@@ -261,13 +280,100 @@ app.post('/api/private/log-entries', (req,res) => {
     if(!uniqueCode) throw new Error('Could not generate a unique log reference. Please try again.');
     const id=uuid();
     db.prepare(`INSERT INTO log_entries
-      (id,unique_code,transaction_type,material_number,material_description,gr_date,po,dr_inv_number,pro_number,vam_number,plate_number,operator,material_condition,truck_cv_condition,no_infestation,truck_cv_odor,truck_cv_seal,gate_in,unloading_start,unloading_end,dwell_minutes,created_by)
-      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,uniqueCode,transactionType,fields.materialNumber,fields.materialDescription,fields.date,fields.po,fields.drInvNumber,fields.proNumber,fields.vamNumber,fields.plateNumber,fields.operator,fields.materialCondition,fields.truckCvCondition,fields.noInfestation,fields.truckCvOdor,fields.truckCvSeal,fields.gateIn,fields.unloadingStart,fields.unloadingEnd,fields.dwellMinutes,req.user.id);
+      (id,unique_code,transaction_type,material_number,material_description,gr_date,po,dr_inv_number,pro_number,vam_number,plate_number,operator,inspection_material_condition,inspection_truck_cv_condition,inspection_no_infestation,inspection_truck_cv_odor,inspection_truck_cv_seal,delivery_truck_gate_in,delivery_truck_unloading_start,delivery_truck_unloading_end,delivery_truck_dwell_minutes,created_by)
+      VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(id,uniqueCode,transactionType,fields.materialNumber,fields.materialDescription,fields.date,fields.po,fields.drInvNumber,fields.proNumber,fields.vamNumber,fields.plateNumber,fields.operator,null,null,null,null,null,null,null,null,null,req.user.id);
     addActivity(req.user,'log_entry','Pre-Print Log Entry Created',`Created ${uniqueCode} for ${transactionType}`,uniqueCode,'Pre-Print');
-    const row=db.prepare('SELECT * FROM log_entries WHERE id=?').get(id);
-    return {id:row.id,uniqueCode:row.unique_code,transactionType:row.transaction_type,materialNumber:row.material_number,materialDescription:row.material_description,date:row.gr_date,po:row.po,drInvNumber:row.dr_inv_number,proNumber:row.pro_number,vamNumber:row.vam_number,plateNumber:row.plate_number,operator:row.operator,materialCondition:row.material_condition,truckCvCondition:row.truck_cv_condition,noInfestation:row.no_infestation,truckCvOdor:row.truck_cv_odor,truckCvSeal:row.truck_cv_seal,gateIn:row.gate_in,unloadingStart:row.unloading_start,unloadingEnd:row.unloading_end,dwellMinutes:row.dwell_minutes,createdBy:req.user.name,createdAt:row.created_at};
+    const row=db.prepare('SELECT e.*,u.full_name AS created_by_name FROM log_entries e JOIN users u ON u.id=e.created_by WHERE e.id=?').get(id);
+    return mapLogEntry(row);
   });
   try { res.status(201).json(create()); } catch(error) { res.status(500).json({error:error.message}); }
+});
+app.post('/api/private/log-entries/:id/archive', (req,res) => {
+  const prior=db.prepare('SELECT * FROM log_entries WHERE id=?').get(req.params.id);
+  if(!prior) return res.status(404).json({error:'Log entry not found'});
+  const input=req.body||{};
+  const choice=value=>['OK','NOT OK',''].includes(value)?value:'';
+  const conditions={
+    materialCondition:choice(input.materialCondition),truckCvCondition:choice(input.truckCvCondition),
+    noInfestation:choice(input.noInfestation),truckCvOdor:choice(input.truckCvOdor),truckCvSeal:choice(input.truckCvSeal),
+  };
+  const times={gateIn:String(input.gateIn||'').trim(),unloadingStart:String(input.unloadingStart||'').trim(),unloadingEnd:String(input.unloadingEnd||'').trim()};
+  const validTime=value=>value===''||/^(?:[01]\d|2[0-3]):[0-5]\d$/.test(value);
+  if(!Object.values(times).every(validTime)) return res.status(400).json({error:'Enter valid delivery truck times'});
+  const toMinutes=value=>value?Number(value.slice(0,2))*60+Number(value.slice(3,5)):null;
+  let dwellMinutes=null;
+  if(times.gateIn&&times.unloadingEnd){dwellMinutes=toMinutes(times.unloadingEnd)-toMinutes(times.gateIn);if(dwellMinutes<0)dwellMinutes+=1440;}
+
+  const sourceBatches=input.batchDetails||{};
+  const batchDetails={left:[],right:[]};
+  for(const side of ['left','right']){
+    batchDetails[side]=Array.from({length:3},(_,index)=>{
+      const row=Array.isArray(sourceBatches[side])?sourceBatches[side][index]||{}:{};
+      return {
+        batchCode:String(row.batchCode||'').trim().slice(0,10),mfgDate:String(row.mfgDate||'').trim().slice(0,6),
+        sap:String(row.sap||'').trim().slice(0,6),plCoi:String(row.plCoi||'').trim().slice(0,6),sledExp:String(row.sledExp||'').trim().slice(0,6),
+      };
+    });
+  }
+  const normalizeNumber=(value,label)=>{
+    const text=String(value??'').trim();
+    if(!text) return '';
+    const number=Number(text);
+    if(!Number.isFinite(number)||number<0) throw new Error(`${label} must be a non-negative number`);
+    return text;
+  };
+  let breakdown;
+  try {
+    breakdown={};
+    for(const side of ['left','right']){
+      const raw=input.breakdown?.[side]||{};
+      const bagsPerPallet=normalizeNumber(raw.bagsPerPallet,'No. of Bags / Pallet');
+      const palletsUsed=normalizeNumber(raw.palletsUsed,'No. of Pallets Used');
+      const weightPerBag=normalizeNumber(raw.weightPerBag,'Weight / Bag');
+      const autoTotal=bagsPerPallet!==''&&palletsUsed!==''&&weightPerBag!==''
+        ? String(Number(bagsPerPallet)*Number(palletsUsed)*Number(weightPerBag)) : '';
+      breakdown[side]={bagsPerPallet,palletsUsed,weightPerBag,totalQuantity:normalizeNumber(raw.totalQuantity,'Total Quantity')||autoTotal};
+    }
+  } catch(error) { return res.status(400).json({error:error.message}); }
+
+  const remarks=String(input.remarks||'').trim().slice(0,4000);
+  const transaction=db.transaction(()=>{
+    db.prepare(`UPDATE log_entries SET
+      inspection_material_condition=?,inspection_truck_cv_condition=?,inspection_no_infestation=?,inspection_truck_cv_odor=?,inspection_truck_cv_seal=?,
+      delivery_truck_gate_in=?,delivery_truck_unloading_start=?,delivery_truck_unloading_end=?,delivery_truck_dwell_minutes=?,
+      batch_details=?,breakdown_data=?,remarks=?,status='Archived',archived_at=CURRENT_TIMESTAMP WHERE id=?`)
+      .run(conditions.materialCondition||null,conditions.truckCvCondition||null,conditions.noInfestation||null,conditions.truckCvOdor||null,conditions.truckCvSeal||null,
+        times.gateIn||null,times.unloadingStart||null,times.unloadingEnd||null,dwellMinutes,JSON.stringify(batchDetails),JSON.stringify(breakdown),remarks,prior.id);
+
+    const totalPallets=['left','right'].reduce((sum,side)=>sum+(Number(breakdown[side].palletsUsed)||0),0);
+    const existingRecord=db.prepare('SELECT id FROM records WHERE arms_ref=?').get(prior.unique_code);
+    const recordId=existingRecord?.id||uuid();
+    const recordFields=[prior.transaction_type,prior.material_document||prior.dr_inv_number,prior.po,prior.gr_date,prior.material_number,prior.material_description,prior.vam_number,Math.round(totalPallets),prior.operator,req.user.name,prior.plate_number,remarks,req.user.name,req.user.name];
+    if(existingRecord){
+      db.prepare(`UPDATE records SET transaction_type=?,material_doc=?,delivery_po=?,gr_date=?,material_number=?,material_description=?,vam_number=?,num_packages=?,operator=?,encoder=?,plate_number=?,remarks=?,status='Available',assigned_custodian=?,custodian=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`)
+        .run(...recordFields,recordId);
+      db.prepare('DELETE FROM record_batches WHERE record_id=?').run(recordId);
+    } else {
+      db.prepare(`INSERT INTO records
+        (id,arms_ref,transaction_type,material_doc,delivery_po,gr_date,material_number,material_description,vam_number,num_packages,operator,encoder,plate_number,remarks,status,assigned_custodian,custodian,location_code)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,'Available',?,?, '')`)
+        .run(recordId,prior.unique_code,...recordFields.slice(0,14));
+    }
+
+    for(const side of ['left','right']){
+      batchDetails[side].forEach((batch,index)=>{
+        if(!batch.batchCode&&!batch.mfgDate&&!batch.sap&&!batch.plCoi&&!batch.sledExp) return;
+        db.prepare(`INSERT INTO record_batches
+          (id,record_id,batch_code,prod_date,exp_date,quantity,block_side,row_number,sap,pl_coi)
+          VALUES(?,?,?,?,?,?,?,?,?,?)`)
+          .run(uuid(),recordId,batch.batchCode,batch.mfgDate,batch.sledExp,'',side,index+1,batch.sap,batch.plCoi);
+      });
+    }
+    addActivity(req.user,'log_entry','Authority to Receive Archived',`Completed and archived ${prior.unique_code}`,prior.unique_code,'Archived');
+    return mapLogEntry(db.prepare('SELECT e.*,u.full_name AS created_by_name FROM log_entries e JOIN users u ON u.id=e.created_by WHERE e.id=?').get(prior.id));
+  });
+
+  try { res.json(transaction()); } catch(error) { res.status(500).json({error:error.message}); }
 });
 app.patch('/api/private/notifications/:id', (req,res) => {
   const n=db.prepare('SELECT * FROM notifications WHERE id=?').get(req.params.id); if(!n)return res.status(404).json({error:'Notification not found'});

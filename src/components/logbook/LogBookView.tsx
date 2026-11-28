@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 
 export const LogBookView: React.FC = () => {
-  const { addFileRecord, currentUser, setActiveTab, logEntries, createLogEntry } = useApp();
+  const { addFileRecord, currentUser, setActiveTab, logEntries, createLogEntry, archiveLogEntry } = useApp();
 
   // Modals state
   const [isLogCountOpen, setIsLogCountOpen] = useState(false);
@@ -691,7 +691,7 @@ export const LogBookView: React.FC = () => {
         onSave={createLogEntry}
         onSaved={entry => { setIsLogEntryOpen(false); setSavedEntryPendingPrint(entry); }}
       />
-      <LogEntryPrintModal entry={prePrintEntry} onClose={() => setPrePrintEntry(null)} />
+      <LogEntryPrintModal entry={prePrintEntry} onClose={() => setPrePrintEntry(null)} onSaveArchive={archiveLogEntry} />
     </div>
   );
 };

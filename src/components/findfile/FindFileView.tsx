@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
 import { useApp } from '../../context/AppContext';
-import { FileRecord, RecordStatus } from '../../types';
+import { FileRecord, LogEntry, RecordStatus } from '../../types';
 import { PullOutModal } from './PullOutModal';
 import { RecordDetailDrawer } from './RecordDetailDrawer';
+import { LogEntryPrintModal } from '../logbook/LogEntryPrintModal';
 import {
   Search,
   FolderMinus,
@@ -19,7 +20,7 @@ import {
 } from 'lucide-react';
 
 export const FindFileView: React.FC = () => {
-  const { files, setActiveTab } = useApp();
+  const { files, setActiveTab, archiveLogEntry } = useApp();
 
   // Controls State
   const [pageSize, setPageSize] = useState<number>(10);
@@ -36,6 +37,7 @@ export const FindFileView: React.FC = () => {
   const [isPullOutOpen, setIsPullOutOpen] = useState(false);
   const [preSelectedRef, setPreSelectedRef] = useState<string | undefined>(undefined);
   const [selectedRecord, setSelectedRecord] = useState<FileRecord | null>(null);
+  const [selectedLogEntry, setSelectedLogEntry] = useState<LogEntry | null>(null);
 
   // Success Pop-up modal after Pull Out form submission
   const [pendingApprovalInfo, setPendingApprovalInfo] = useState<{ series: string; ref: string } | null>(null);
@@ -63,6 +65,9 @@ export const FindFileView: React.FC = () => {
         item.custodian.toLowerCase().includes(query) ||
         (item.assignedCustodian || '').toLowerCase().includes(query) ||
         item.materialNumber.toLowerCase().includes(query) ||
+        (item.materialDescription || '').toLowerCase().includes(query) ||
+        (item.archivedLogEntry?.drInvNumber || '').toLowerCase().includes(query) ||
+        (item.lineItems || []).some(line => (line.batchCode || '').toLowerCase().includes(query)) ||
         item.transactionType.toLowerCase().includes(query);
 
       // Filter by Transaction Type
@@ -422,10 +427,20 @@ export const FindFileView: React.FC = () => {
       <RecordDetailDrawer
         record={selectedRecord}
         onClose={() => setSelectedRecord(null)}
+        onOpenArchivedForm={entry => {
+          setSelectedRecord(null);
+          setSelectedLogEntry(entry);
+        }}
         onRequestBorrow={file => {
           setPreSelectedRef(file.armsRef);
           setIsPullOutOpen(true);
         }}
+      />
+
+      <LogEntryPrintModal
+        entry={selectedLogEntry}
+        onClose={() => setSelectedLogEntry(null)}
+        onSaveArchive={archiveLogEntry}
       />
 
       {/* Requisition "Pending Approval: Check notifications for status update" Popup Modal */}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { useApp } from '../../context/AppContext';
-import { FileRecord } from '../../types';
+import { FileRecord, LogEntry } from '../../types';
 import {
   X,
   MapPin,
@@ -13,19 +13,22 @@ import {
   Clock,
   Truck,
   Hash,
-  AlertTriangle
+  AlertTriangle,
+  Printer
 } from 'lucide-react';
 
 interface RecordDetailDrawerProps {
   record: FileRecord | null;
   onClose: () => void;
   onRequestBorrow: (record: FileRecord) => void;
+  onOpenArchivedForm: (entry: LogEntry) => void;
 }
 
 export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
   record,
   onClose,
-  onRequestBorrow
+  onRequestBorrow,
+  onOpenArchivedForm
 }) => {
   const { returnBorrowedFile, currentUser } = useApp();
 
@@ -93,6 +96,15 @@ export const RecordDetailDrawer: React.FC<RecordDetailDrawerProps> = ({
 
           {/* Body Content */}
           <div className="p-6 space-y-6 text-sm">
+            {record.archivedLogEntry && (
+              <button
+                type="button"
+                onClick={() => onOpenArchivedForm(record.archivedLogEntry!)}
+                className="flex w-full items-center justify-center gap-2 rounded-lg bg-[#0A5C1D] px-4 py-3 text-sm font-bold text-white hover:bg-[#084917]"
+              >
+                <Printer className="h-4 w-4" /> View / Print Authority to Receive
+              </button>
+            )}
             {/* If Borrowed: Active Custody Alert Card */}
             {isBorrowed && record.borrowInfo && (
               <div className="p-4 rounded-xl bg-rose-50 border border-rose-200 space-y-3">
